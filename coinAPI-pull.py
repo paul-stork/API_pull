@@ -66,7 +66,7 @@ daily_df = daily_df[['exchange_id','rate_close','rate_high','rate_low','rate_ope
 
 
 try:    
-    daily_df.to_sql('daily_crypto_data_test', schema = 'crypto_data', con=conn, if_exists='append', index=False)
+    daily_df.to_sql('daily_crypto_data', schema = 'crypto_data', con=conn, if_exists='append', index=False)
 
     print('data loaded to table')
 except exc.SQLAlchemyError as e:
