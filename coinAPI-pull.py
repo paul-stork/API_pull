@@ -16,7 +16,7 @@ import os
 import requests
 import json
 import pandas as pd
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from sqlalchemy import exc
 from sqlalchemy import create_engine
 
@@ -32,8 +32,7 @@ conn = db.connect()
 
 
 # Get the date for today and yesterday and convert them to YYYY-mm-ddT00:00:00 format for API call
-
-yesterday_date = date.today() - timedelta(days = 1)
+yesterday_date = datetime.now() - timedelta(days = 1)
 yesterday = f"{yesterday_date.strftime('%Y-%m-%d')}T00:00:00"
 today = f"{datetime.now().strftime('%Y-%m-%d')}T00:00:00"
 
