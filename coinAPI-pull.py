@@ -36,11 +36,8 @@ today = f"{datetime.now().strftime('%Y-%m-%d')}T00:00:00"
 # Create an empty Dataframe to hold the values after each run of the loop
 daily_df = pd.DataFrame()
 
-i = 1
-
 # Get yesterdays crypto coin values
 crypto_coins = {0:"BTC", 1:'ETH', 2:'USDT', 3:"USDC", 4:"BNB", 5:"BUSD", 6:"XRP", 7:"ADA", 8:"DOGE", 9:"MATIC"}
-# while i <= len(crypto_coins):
 for i in range(len(crypto_coins)):
     exchange_id = crypto_coins[i]
 
@@ -49,7 +46,7 @@ for i in range(len(crypto_coins)):
         yesterdays_response = requests.get(f'{url}&apikey={coinapi_key}')
     
         daily_text = json.dumps(yesterdays_response.json(), sort_keys=True, indent=4)
-        print(daily_text)
+        # print(daily_text)
         if "status" not in daily_text:
             temp_df = pd.read_json(daily_text)
             temp_df['exchange_id'] = exchange_id
@@ -64,11 +61,11 @@ for i in range(len(crypto_coins)):
 
 daily_df = daily_df[['exchange_id','rate_close','rate_high','rate_low','rate_open','time_close','time_open','time_period_end','time_period_start']]
 
-print(daily_df)
+# print(daily_df)
 
-# try:    
-#     daily_df.to_sql(name = 'daily_crypto_data', con=conn, if_exists='append', index=False)
+try:    
+    daily_df.to_sql(name = 'daily_crypto_data', con=conn, if_exists='append', index=False)
 
-#     print('data loaded to table')
-# except exc.SQLAlchemyError as e:
-#     print(f'There was an error: {e}')
+    print('data loaded to table')
+except exc.SQLAlchemyError as e:
+    print(f'There was an error: {e}')
