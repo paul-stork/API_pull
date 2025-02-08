@@ -12,12 +12,13 @@
 # Finally, the dataframe that has each crytpo coin value in 30 minute increments is written to a PostgreSQL db table.
 
 from dotenv import load_dotenv
+import numpy as np
 import os
 import requests
 import json
 import pandas as pd
 from datetime import datetime, timedelta
-from sqlalchemy import exc, create_engine
+from sqlalchemy import exc, create_engine, text
 import time
 
 load_dotenv()
@@ -50,22 +51,23 @@ for i in range(len(crypto_coins)):
         if "status" not in daily_text:
             temp_df = pd.read_json(daily_text)
             temp_df['exchange_id'] = exchange_id
-            daily_df = pd.concat([daily_df, temp_df])
+            daily_df = pd.concat([daily_df, temp_df], ignore_index=True)
             
             time.sleep(3)
         else: 
             time.sleep(15)
     except requests.HTTPError as e:
         print(f'There was an error: {e}')
-
+        
+daily_df[['time_close', 'time_open', 'time_period_end', 'time_period_start']] = daily_df[['time_close', 'time_open', 'time_period_end', 'time_period_start']].apply(pd.to_datetime, utc=True)
+        
 
 daily_df = daily_df[['exchange_id','rate_close','rate_high','rate_low','rate_open','time_close','time_open','time_period_end','time_period_start']]
-
-# print(daily_df)
+daily_df = daily_df.drop_duplicates().sort_values(by='time_period_start', ignore_index=True)
 
 try:    
-    daily_df.to_sql(name = 'daily_crypto_data', con=conn, if_exists='append', index=False)
-
+    daily_df.to_sql(name = 'daily_crypto_prod', schema='crypto_data', con=conn, if_exists='append', index=False)
+        
     print('data loaded to table')
 except exc.SQLAlchemyError as e:
     print(f'There was an error: {e}')
