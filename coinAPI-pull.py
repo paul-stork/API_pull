@@ -12,45 +12,51 @@
 # Finally, the dataframe that has each crytpo coin value in 30 minute increments is written to a PostgreSQL db table.
 
 from dotenv import load_dotenv
-import numpy as np
 import os
 import requests
 import json
 import pandas as pd
-from datetime import datetime, timedelta
-from sqlalchemy import exc, create_engine, text
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 import time
 
 load_dotenv()
-coinapi_key = os.getenv('coinapi_key')
-
 conn_string = os.getenv('db_conn_string')
+coindesk_key = os.getenv('coindesk_key')
 
 db = create_engine(conn_string)
 conn = db.connect()
 
 # Get the date for today and yesterday and convert them to YYYY-mm-ddT00:00:00 format for API call
 yesterday_date = datetime.now() - timedelta(days = 1)
-yesterday = f"{yesterday_date.strftime('%Y-%m-%d')}T00:00:00"
-today = f"{datetime.now().strftime('%Y-%m-%d')}T00:00:00"
+yesterday_start = f"{yesterday_date.strftime('%Y-%m-%d')}T00:00:00"
+start_datetime_object = datetime.strptime(yesterday_start, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+
+yesterday_end = f"{yesterday_date.strftime('%Y-%m-%d')}T23:59:59"
+end_datetime_object = datetime.strptime(yesterday_end, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+end_timestamp = int(end_datetime_object.timestamp())
 
 # Create an empty Dataframe to hold the values after each run of the loop
 daily_df = pd.DataFrame()
 
 # Get yesterdays crypto coin values
-crypto_coins = {0:"BTC", 1:'ETH', 2:'USDT', 3:"USDC", 4:"BNB", 5:"BUSD", 6:"XRP", 7:"ADA", 8:"DOGE", 9:"MATIC"}
+# crypto_coins = {0:"BTC-USD"}
+crypto_coins = {0:"BTC-USD", 1:'ETH-USD', 2:'USDT-USD', 3:"USDC-USD", 4:"BNB-USD", 5:"XRP-USD", 6:"ADA-USD", 7:"DOGE-USD", 8:"MATIC-USD"}
 for i in range(len(crypto_coins)):
     exchange_id = crypto_coins[i]
 
-    url = f'https://rest.coinapi.io/v1/exchangerate/{exchange_id}/USD/history?period_id=30MIN&time_start={yesterday}&time_end={today}'
     try:
-        yesterdays_response = requests.get(f'{url}&apikey={coinapi_key}')
-    
-        daily_text = json.dumps(yesterdays_response.json(), sort_keys=True, indent=4)
-        # print(daily_text)
+        # yesterdays_response = requests.get(f'{url}&apikey={coindesk_key}')
+        yesterdays_response = requests.get('https://data-api.coindesk.com/index/cc/v1/historical/hours',
+            params={"market":"cadli","instrument":exchange_id,"limit":24,"aggregate":1,"fill":"true","apply_mapping":"true","response_format":"JSON","to_ts":end_timestamp,"api_key":coindesk_key},
+            headers={"Content-type":"application/json; charset=UTF-8"}
+        )
+        
+        daily_text = json.dumps(yesterdays_response.json()['Data'], sort_keys=True, indent=4)
         if "status" not in daily_text:
             temp_df = pd.read_json(daily_text)
-            temp_df['exchange_id'] = exchange_id
+            temp_df['exchange_id'] = exchange_id.replace('-USD','')
             daily_df = pd.concat([daily_df, temp_df], ignore_index=True)
             
             time.sleep(3)
@@ -59,9 +65,17 @@ for i in range(len(crypto_coins)):
     except requests.HTTPError as e:
         print(f'There was an error: {e}')
         
-daily_df[['time_close', 'time_open', 'time_period_end', 'time_period_start']] = daily_df[['time_close', 'time_open', 'time_period_end', 'time_period_start']].apply(pd.to_datetime, utc=True)
-        
+daily_df = daily_df[['exchange_id','FIRST_MESSAGE_TIMESTAMP', 'LAST_MESSAGE_TIMESTAMP', 'OPEN', 'HIGH_MESSAGE_VALUE', 'LOW_MESSAGE_VALUE', 'CLOSE']]
 
+daily_df['FIRST_MESSAGE_TIMESTAMP'] = pd.to_datetime(daily_df['FIRST_MESSAGE_TIMESTAMP'], unit='s', utc=True)
+daily_df['LAST_MESSAGE_TIMESTAMP'] = pd.to_datetime(daily_df['LAST_MESSAGE_TIMESTAMP'], unit='s', utc=True)
+
+daily_df['time_period_start'] = start_datetime_object
+daily_df['time_period_end'] = end_datetime_object
+
+daily_df.rename(columns={'FIRST_MESSAGE_TIMESTAMP' : 'time_close', 'LAST_MESSAGE_TIMESTAMP': 'time_open', 'OPEN': 'rate_open', 'HIGH_MESSAGE_VALUE': 'rate_high', 'LOW_MESSAGE_VALUE': 'rate_low', 'CLOSE': 'rate_close'}, inplace=True)
+
+print(daily_df)
 daily_df = daily_df[['exchange_id','rate_close','rate_high','rate_low','rate_open','time_close','time_open','time_period_end','time_period_start']]
 daily_df = daily_df.drop_duplicates().sort_values(by='time_period_start', ignore_index=True)
 
@@ -69,5 +83,5 @@ try:
     daily_df.to_sql(name = 'daily_crypto_prod', schema='crypto_data', con=conn, if_exists='append', index=False)
         
     print('data loaded to table')
-except exc.SQLAlchemyError as e:
+except SQLAlchemyError as e:
     print(f'There was an error: {e}')

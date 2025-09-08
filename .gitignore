@@ -1,2 +1,4 @@
 /.env
 *.csv
+coinapi-venv
+test_data.py
